@@ -1,0 +1,407 @@
+--- origsrc/upower-0.9.23/Makefile.am	2013-10-18 09:41:24.000000000 -0500
++++ src/upower-0.9.23/Makefile.am	2014-07-23 14:34:24.392271500 -0500
+@@ -2,7 +2,7 @@
+ 
+ ACLOCAL_AMFLAGS = -I m4 ${ACLOCAL_FLAGS}
+ 
+-SUBDIRS = etc libupower-glib src doc tools policy po
++SUBDIRS = etc libupower-glib src doc tools po
+ 
+ if BACKEND_TYPE_LINUX
+ SUBDIRS += rules
+--- origsrc/upower-0.9.23/configure.ac	2013-10-18 09:59:43.000000000 -0500
++++ src/upower-0.9.23/configure.ac	2014-07-23 14:36:26.618792300 -0500
+@@ -155,7 +155,6 @@ AC_SUBST([RELRO_LDFLAGS])
+ PKG_CHECK_MODULES(GLIB, [glib-2.0 >= 2.21.5])
+ PKG_CHECK_MODULES(DBUS, [dbus-1 >= 1.0])
+ PKG_CHECK_MODULES(DBUS_GLIB, [dbus-glib-1 >= 0.76])
+-PKG_CHECK_MODULES(POLKIT, polkit-gobject-1 >= 0.97)
+ PKG_CHECK_MODULES(GIO, [gio-2.0 >= 2.16.1])
+ 
+ dnl ====================================================================
+--- origsrc/upower-0.9.23/src/Makefile.am	2013-10-18 09:41:24.000000000 -0500
++++ src/upower-0.9.23/src/Makefile.am	2014-07-23 21:09:11.986214000 -0500
+@@ -68,8 +68,6 @@ dbusif_DATA =							\
+ 	org.freedesktop.UPower.Wakeups.xml
+ 
+ upowerd_SOURCES =						\
+-	up-polkit.h						\
+-	up-polkit.c						\
+ 	up-daemon.h						\
+ 	up-daemon.c						\
+ 	up-device.h						\
+@@ -153,8 +159,6 @@ check_PROGRAMS =						\
+ 
+ up_self_test_SOURCES =						\
+ 	up-self-test.c						\
+-	up-polkit.h						\
+-	up-polkit.c						\
+ 	up-config.h						\
+ 	up-config.c						\
+ 	up-daemon.h						\
+--- origsrc/upower-0.9.23/src/up-daemon.c	2013-10-18 09:41:24.000000000 -0500
++++ src/upower-0.9.23/src/up-daemon.c	2014-07-23 14:34:24.410273800 -0500
+@@ -33,7 +33,6 @@
+ #include <dbus/dbus-glib-lowlevel.h>
+ 
+ #include "up-config.h"
+-#include "up-polkit.h"
+ #include "up-device-list.h"
+ #include "up-device.h"
+ #include "up-backend.h"
+@@ -77,7 +76,6 @@ struct UpDaemonPrivate
+ 	DBusGConnection		*connection;
+ 	DBusGProxy		*proxy;
+ 	UpConfig		*config;
+-	UpPolkit		*polkit;
+ 	UpBackend		*backend;
+ 	UpDeviceList		*power_devices;
+ 	gboolean		 on_battery;
+@@ -333,7 +331,6 @@ up_daemon_about_to_sleep (UpDaemon *daem
+ {
+ 	GError *error;
+ #ifdef ENABLE_DEPRECATED
+-	PolkitSubject *subject = NULL;
+ 	UpDaemonPrivate *priv = daemon->priv;
+ 
+ 	/* already requested */
+@@ -346,13 +343,6 @@ up_daemon_about_to_sleep (UpDaemon *daem
+ 		goto out;
+ 	}
+ 
+-	subject = up_polkit_get_subject (priv->polkit, context);
+-	if (subject == NULL)
+-		goto out;
+-
+-	/* TODO: use another PolicyKit context? */
+-	if (!up_polkit_check_auth (priv->polkit, subject, "org.freedesktop.upower.suspend", context))
+-		goto out;
+ 
+ 	/* we've told the clients we're going down */
+ 	g_debug ("emitting sleeping");
+@@ -364,8 +354,6 @@ up_daemon_about_to_sleep (UpDaemon *daem
+ 
+ 	dbus_g_method_return (context, NULL);
+ out:
+-	if (subject != NULL)
+-		g_object_unref (subject);
+ 	return TRUE;
+ #else
+ 	/* just return an error */
+@@ -518,7 +506,6 @@ up_daemon_suspend (UpDaemon *daemon, DBu
+ {
+ 	GError *error;
+ #ifdef ENABLE_DEPRECATED
+-	PolkitSubject *subject = NULL;
+ 	const gchar *command;
+ 	UpDaemonPrivate *priv = daemon->priv;
+ 
+@@ -532,13 +519,6 @@ up_daemon_suspend (UpDaemon *daemon, DBu
+ 		goto out;
+ 	}
+ 
+-	subject = up_polkit_get_subject (priv->polkit, context);
+-	if (subject == NULL)
+-		goto out;
+-
+-	if (!up_polkit_check_auth (priv->polkit, subject, "org.freedesktop.upower.suspend", context))
+-		goto out;
+-
+ 	/* already requested */
+ 	if (priv->about_to_sleep_id != 0) {
+ 		error = g_error_new (UP_DAEMON_ERROR,
+@@ -554,8 +534,6 @@ up_daemon_suspend (UpDaemon *daemon, DBu
+ 	command = up_backend_get_suspend_command (priv->backend);
+ 	up_daemon_deferred_sleep (daemon, command, context);
+ out:
+-	if (subject != NULL)
+-		g_object_unref (subject);
+ 	return TRUE;
+ #else
+ 	/* just return an error */
+@@ -577,26 +555,9 @@ up_daemon_suspend_allowed (UpDaemon *dae
+ 	GError *error;
+ #ifdef ENABLE_DEPRECATED
+ 	gboolean ret;
+-	PolkitSubject *subject = NULL;
+ 	UpDaemonPrivate *priv = daemon->priv;
+ 
+-	subject = up_polkit_get_subject (priv->polkit, context);
+-	if (subject == NULL)
+-		goto out;
+-
+-	error = NULL;
+-	ret = up_polkit_is_allowed (priv->polkit, subject, "org.freedesktop.upower.suspend", &error);
+-	if (error) {
+-		dbus_g_method_return_error (context, error);
+-		g_error_free (error);
+-	}
+-	else {
+-		dbus_g_method_return (context, ret);
+-	}
+-
+ out:
+-	if (subject != NULL)
+-		g_object_unref (subject);
+ 	return TRUE;
+ #else
+ 	/* just return an error */
+@@ -644,7 +605,6 @@ up_daemon_hibernate (UpDaemon *daemon, D
+ {
+ 	GError *error;
+ #ifdef ENABLE_DEPRECATED
+-	PolkitSubject *subject = NULL;
+ 	const gchar *command;
+ 	UpDaemonPrivate *priv = daemon->priv;
+ 
+@@ -679,13 +639,6 @@ up_daemon_hibernate (UpDaemon *daemon, D
+ 		goto out;
+ 	}
+ 
+-	subject = up_polkit_get_subject (priv->polkit, context);
+-	if (subject == NULL)
+-		goto out;
+-
+-	if (!up_polkit_check_auth (priv->polkit, subject, "org.freedesktop.upower.hibernate", context))
+-		goto out;
+-
+ 	/* already requested */
+ 	if (priv->about_to_sleep_id != 0) {
+ 		error = g_error_new (UP_DAEMON_ERROR,
+@@ -701,8 +654,6 @@ up_daemon_hibernate (UpDaemon *daemon, D
+ 	command = up_backend_get_hibernate_command (priv->backend);
+ 	up_daemon_deferred_sleep (daemon, command, context);
+ out:
+-	if (subject != NULL)
+-		g_object_unref (subject);
+ 	return TRUE;
+ #else
+ 	/* just return an error */
+@@ -724,26 +675,9 @@ up_daemon_hibernate_allowed (UpDaemon *d
+ 	GError *error;
+ #ifdef ENABLE_DEPRECATED
+ 	gboolean ret;
+-	PolkitSubject *subject = NULL;
+ 	UpDaemonPrivate *priv = daemon->priv;
+ 
+-	subject = up_polkit_get_subject (priv->polkit, context);
+-	if (subject == NULL)
+-		goto out;
+-
+-	error = NULL;
+-	ret = up_polkit_is_allowed (priv->polkit, subject, "org.freedesktop.upower.hibernate", &error);
+-	if (error) {
+-		dbus_g_method_return_error (context, error);
+-		g_error_free (error);
+-	}
+-	else {
+-		dbus_g_method_return (context, ret);
+-	}
+-
+ out:
+-	if (subject != NULL)
+-		g_object_unref (subject);
+ 	return TRUE;
+ #else
+ 	/* just return an error */
+@@ -1144,7 +1078,6 @@ up_daemon_init (UpDaemon *daemon)
+ 	gchar *filename;
+ 
+ 	daemon->priv = UP_DAEMON_GET_PRIVATE (daemon);
+-	daemon->priv->polkit = up_polkit_new ();
+ 	daemon->priv->config = up_config_new ();
+ 	daemon->priv->lid_is_present = FALSE;
+ 	daemon->priv->is_docked = FALSE;
+@@ -1477,7 +1410,6 @@ up_daemon_finalize (GObject *object)
+ 	if (priv->connection != NULL)
+ 		dbus_g_connection_unref (priv->connection);
+ 	g_object_unref (priv->power_devices);
+-	g_object_unref (priv->polkit);
+ 	g_object_unref (priv->config);
+ 	g_object_unref (priv->backend);
+ #ifdef ENABLE_DEPRECATED
+--- origsrc/upower-0.9.23/src/up-daemon.h	2013-10-18 09:41:24.000000000 -0500
++++ src/upower-0.9.23/src/up-daemon.h	2014-07-23 14:34:24.412774100 -0500
+@@ -22,7 +22,6 @@
+ #define __UP_DAEMON_H__
+ 
+ #include <glib-object.h>
+-#include <polkit/polkit.h>
+ #include <dbus/dbus-glib.h>
+ 
+ #include "up-types.h"
+--- origsrc/upower-0.9.23/src/up-device.h	2013-10-18 09:41:24.000000000 -0500
++++ src/upower-0.9.23/src/up-device.h	2014-07-23 14:34:24.415274500 -0500
+@@ -23,7 +23,6 @@
+ #define __UP_DEVICE_H__
+ 
+ #include <glib-object.h>
+-#include <polkit/polkit.h>
+ #include <dbus/dbus-glib.h>
+ 
+ #include "up-daemon.h"
+--- origsrc/upower-0.9.23/src/up-qos.c	2013-10-18 09:41:24.000000000 -0500
++++ src/upower-0.9.23/src/up-qos.c	2014-07-23 14:34:24.418774900 -0500
+@@ -35,7 +35,6 @@
+ #include "up-qos.h"
+ #include "up-marshal.h"
+ #include "up-daemon.h"
+-#include "up-polkit.h"
+ #include "up-qos-item.h"
+ #include "up-qos-glue.h"
+ #include "up-types.h"
+@@ -61,7 +60,6 @@ struct UpQosPrivate
+ 	gint			 fd[UP_QOS_KIND_LAST];
+ 	gint			 last[UP_QOS_KIND_LAST];
+ 	gint			 minimum[UP_QOS_KIND_LAST];
+-	UpPolkit		*polkit;
+ 	DBusGConnection		*connection;
+ 	DBusGProxy		*proxy;
+ };
+@@ -251,7 +249,6 @@ up_qos_request_latency (UpQos *qos, cons
+ 	GError *error;
+ 	guint uid;
+ 	gint pid;
+-	PolkitSubject *subject = NULL;
+ 	gboolean retval;
+ 	UpQosKind type;
+ 
+@@ -273,36 +270,6 @@ up_qos_request_latency (UpQos *qos, cons
+ 		goto out;
+ 	}
+ 
+-	/* get the subject */
+-	subject = up_polkit_get_subject (qos->priv->polkit, context);
+-	if (subject == NULL)
+-		goto out;
+-
+-	/* check auth */
+-	if (persistent)
+-		auth = "org.freedesktop.upower.qos.request-latency-persistent";
+-	else
+-		auth = "org.freedesktop.upower.qos.request-latency";
+-	if (!up_polkit_check_auth (qos->priv->polkit, subject, auth, context))
+-		goto out;
+-
+-	/* get uid */
+-	retval = up_polkit_get_uid (qos->priv->polkit, subject, &uid);
+-	if (!retval) {
+-		error = g_error_new (UP_DAEMON_ERROR, UP_DAEMON_ERROR_GENERAL, "cannot get UID");
+-		dbus_g_method_return_error (context, error);
+-		g_error_free (error);
+-		goto out;
+-	}
+-
+-	/* get pid */
+-	retval = up_polkit_get_pid (qos->priv->polkit, subject, &pid);
+-	if (!retval) {
+-		error = g_error_new (UP_DAEMON_ERROR, UP_DAEMON_ERROR_GENERAL, "cannot get PID");
+-		dbus_g_method_return_error (context, error);
+-		g_error_free (error);
+-		goto out;
+-	}
+ 
+ 	/* get command line */
+ 	cmdline = up_qos_get_cmdline (pid);
+@@ -337,8 +304,6 @@ up_qos_request_latency (UpQos *qos, cons
+ 	up_qos_latency_perhaps_changed (qos, type);
+ 	dbus_g_method_return (context, up_qos_item_get_cookie (item));
+ out:
+-	if (subject != NULL)
+-		g_object_unref (subject);
+ 	g_free (sender);
+ 	g_free (cmdline);
+ }
+@@ -354,7 +319,6 @@ up_qos_cancel_request (UpQos *qos, guint
+ 	UpQosItem *item;
+ 	GError *error;
+ 	gchar *sender = NULL;
+-	PolkitSubject *subject = NULL;
+ 	UpQosKind item_kind;
+ 
+ 	/* find the correct cookie */
+@@ -376,15 +340,6 @@ up_qos_cancel_request (UpQos *qos, guint
+ 		goto out;
+ 	}
+ 
+-	/* are we not the sender? */
+-	if (g_strcmp0 (sender, up_qos_item_get_sender (item)) != 0) {
+-		subject = up_polkit_get_subject (qos->priv->polkit, context);
+-		if (subject == NULL)
+-			goto out;
+-		if (!up_polkit_check_auth (qos->priv->polkit, subject, "org.freedesktop.upower.qos.cancel-request", context))
+-			goto out;
+-	}
+-
+ 	g_debug ("Clear #%i", cookie);
+ 
+ 	/* remove object from list */
+@@ -398,8 +353,6 @@ up_qos_cancel_request (UpQos *qos, guint
+ 
+ 	dbus_g_method_return (context, NULL);
+ out:
+-	if (subject != NULL)
+-		g_object_unref (subject);
+ 	g_free (sender);
+ }
+ 
+@@ -562,7 +515,6 @@ up_qos_init (UpQos *qos)
+ 	GError *error = NULL;
+ 
+ 	qos->priv = UP_QOS_GET_PRIVATE (qos);
+-	qos->priv->polkit = up_polkit_new ();
+ 	qos->priv->data = g_ptr_array_new_with_free_func ((GDestroyNotify) g_object_unref);
+ 	/* TODO: need to load persistent values */
+ 
+@@ -623,8 +575,6 @@ up_qos_finalize (GObject *object)
+ 	g_ptr_array_unref (qos->priv->data);
+ 	g_object_unref (qos->priv->proxy);
+ 
+-	g_object_unref (qos->priv->polkit);
+-
+ 	G_OBJECT_CLASS (up_qos_parent_class)->finalize (object);
+ }
+ 
+--- origsrc/upower-0.9.23/src/up-self-test.c	2013-10-18 09:41:24.000000000 -0500
++++ src/upower-0.9.23/src/up-self-test.c	2014-07-23 14:34:24.421775300 -0500
+@@ -32,7 +32,6 @@
+ #include "up-device-list.h"
+ #include "up-history.h"
+ #include "up-native.h"
+-#include "up-polkit.h"
+ #include "up-qos.h"
+ #include "up-wakeups.h"
+ 
+@@ -283,24 +282,6 @@ up_test_history_func (void)
+ }
+ 
+ static void
+-up_test_polkit_func (void)
+-{
+-	UpPolkit *polkit;
+-
+-	/* polkit only listens to the system bus */
+-	if (!g_file_test (DBUS_SYSTEM_SOCKET, G_FILE_TEST_EXISTS)) {
+-		puts("No system D-BUS running, skipping test");
+-		return;
+-	}
+-
+-	polkit = up_polkit_new ();
+-	g_assert (polkit != NULL);
+-
+-	/* unref */
+-	g_object_unref (polkit);
+-}
+-
+-static void
+ up_test_qos_func (void)
+ {
+ 	UpQos *qos;
+@@ -350,7 +331,6 @@ main (int argc, char **argv)
+ 	g_test_add_func ("/power/device_list", up_test_device_list_func);
+ 	g_test_add_func ("/power/history", up_test_history_func);
+ 	g_test_add_func ("/power/native", up_test_native_func);
+-	g_test_add_func ("/power/polkit", up_test_polkit_func);
+ 	g_test_add_func ("/power/qos", up_test_qos_func);
+ 	g_test_add_func ("/power/wakeups", up_test_wakeups_func);
+ 	g_test_add_func ("/power/daemon", up_test_daemon_func);

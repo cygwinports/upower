@@ -1,0 +1,12 @@
+--- origsrc/upower-0.9.23/configure.ac	2013-10-18 09:59:43.000000000 -0500
++++ src/upower-0.9.23/configure.ac	2014-07-23 14:36:26.618792300 -0500
+@@ -229,9 +230,6 @@ fi
+ # i18n support
+ IT_PROG_INTLTOOL([0.40.0])
+ 
+-AM_GNU_GETTEXT_VERSION([0.17])
+-AM_GNU_GETTEXT([external])
+-
+ AC_SUBST([GETTEXT_PACKAGE],[${PACKAGE_TARNAME}])
+ AC_DEFINE([GETTEXT_PACKAGE],[PACKAGE_TARNAME],[Define to the gettext package name])
+ 
