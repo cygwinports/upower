@@ -11,6 +11,7 @@ service on the system can access the org.freedesktop.UPower service via the
 system message bus."
 HOMEPAGE="http://upower.freedesktop.org/"
 SRC_URI="http://upower.freedesktop.org/releases/upower-${VERSION}.tar.xz"
+SRC_URI+=" upowerd.sh"
 PATCH_URI="
 	0.9.23-glib-gettext.patch
 	0.9.23-drop-polkit.patch
@@ -25,14 +26,18 @@ src_install() {
 	cd ${B}
 	cyginstall
 
+	exeinto /etc/rc.d/init.d
+	newexe ${S}/upowerd.sh upowerd
+
 	keepdir /var/lib/upower
 }
 
 PKG_NAMES="upower libupower-glib1 libupower-glib-devel libupower-glib-doc girepository-UPowerGlib1.0"
-upower_CONTENTS="etc/UPower/ etc/dbus-1/ usr/bin/upower.exe
+upower_CONTENTS="etc/UPower/ etc/dbus-1/ etc/rc.d/ usr/bin/upower.exe
 	usr/libexec/upowerd.exe usr/share/dbus-1/ usr/share/doc/
 	usr/share/locale/ usr/share/man/ var/lib/upower/"
 libupower_glib1_CATEGORY="Libs"
+libupower_glib1_REQUIRES=${NAME}
 libupower_glib1_CONTENTS="usr/bin/cygupower-glib-1.dll"
 libupower_glib_devel_CATEGORY="Libs"
 libupower_glib_devel_CONTENTS="usr/include/libupower-glib/
