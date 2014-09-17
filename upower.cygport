@@ -2,7 +2,7 @@ inherit gnome2
 
 NAME="upower"
 VERSION=0.9.23
-RELEASE=1
+RELEASE=2
 CATEGORY="System"
 SUMMARY="System power monitoring service"
 DESCRIPTION="UPower is an abstraction for enumerating power devices, listening

@@ -1,5 +1,5 @@
---- origsrc/upower-0.9.23/configure.ac	2014-07-24 00:44:44.643452900 -0500
-+++ src/upower-0.9.23/configure.ac	2014-07-23 14:36:26.618792300 -0500
+--- origsrc/upower-0.9.23/configure.ac	2014-09-17 16:33:03.135489100 -0500
++++ src/upower-0.9.23/configure.ac	2014-09-17 15:35:06.000000000 -0500
 @@ -187,6 +187,7 @@ if test x$with_backend = x; then
  		[*-linux*],   [with_backend=linux],
  		[*-*freebsd*], [with_backend=freebsd],
@@ -24,8 +24,8 @@
  tools/Makefile
  doc/Makefile
  doc/version.xml
---- origsrc/upower-0.9.23/src/Makefile.am	2014-07-24 00:44:40.916479600 -0500
-+++ src/upower-0.9.23/src/Makefile.am	2014-07-23 21:09:11.986214000 -0500
+--- origsrc/upower-0.9.23/src/Makefile.am	2014-09-17 16:33:03.145489100 -0500
++++ src/upower-0.9.23/src/Makefile.am	2014-09-17 15:35:06.000000000 -0500
 @@ -1,6 +1,6 @@
  ## Process this file with automake to produce Makefile.in
  
@@ -71,7 +71,7 @@
  	$(WARNINGFLAGS_C)					\
  	$(NULL)
 --- origsrc/upower-0.9.23/src/cygwin/Makefile.am	1969-12-31 18:00:00.000000000 -0600
-+++ src/upower-0.9.23/src/cygwin/Makefile.am	2014-07-23 20:58:14.501224000 -0500
++++ src/upower-0.9.23/src/cygwin/Makefile.am	2014-09-17 15:35:06.000000000 -0500
 @@ -0,0 +1,25 @@
 +## Process this file with automake to produce Makefile.in
 +
@@ -99,8 +99,8 @@
 +
 +-include $(top_srcdir)/git.mk
 --- origsrc/upower-0.9.23/src/cygwin/up-backend.c	1969-12-31 18:00:00.000000000 -0600
-+++ src/upower-0.9.23/src/cygwin/up-backend.c	2014-07-24 13:18:23.306993900 -0500
-@@ -0,0 +1,590 @@
++++ src/upower-0.9.23/src/cygwin/up-backend.c	2014-09-17 16:50:41.400854500 -0500
+@@ -0,0 +1,604 @@
 +/* -*- Mode: C; tab-width: 8; indent-tabs-mode: t; c-basic-offset: 8 -*-
 + *
 + * Copyright (C) 2011 Landry Breuil <landry@openbsd.org>
@@ -154,6 +154,7 @@
 +	UpDevice		*ac;
 +	UpDevice		*battery;
 +	GThread			*win_thread;
++	gboolean		is_laptop;
 +};
 +
 +enum {
@@ -257,17 +258,21 @@
 +	backend->priv->daemon = g_object_ref (daemon);
 +	/* XXX no way to get lid status atm */
 +	up_daemon_set_lid_is_present (backend->priv->daemon, FALSE);
++
 +	acnative = up_win_native_new("/ac");
 +	if (!up_device_coldplug (backend->priv->ac, backend->priv->daemon, G_OBJECT(acnative)))
 +		g_warning ("failed to coldplug ac");
 +	else
 +		g_signal_emit (backend, signals[SIGNAL_DEVICE_ADDED], 0, acnative, backend->priv->ac);
 +
-+	battnative = up_win_native_new("/batt");
-+	if (!up_device_coldplug (backend->priv->battery, backend->priv->daemon, G_OBJECT(battnative)))
-+		g_warning ("failed to coldplug battery");
-+	else
-+		g_signal_emit (backend, signals[SIGNAL_DEVICE_ADDED], 0, battnative, backend->priv->battery);
++	if (backend->priv->is_laptop)
++	{
++		battnative = up_win_native_new("/batt");
++		if (!up_device_coldplug (backend->priv->battery, backend->priv->daemon, G_OBJECT(battnative)))
++			g_warning ("failed to coldplug battery");
++		else
++			g_signal_emit (backend, signals[SIGNAL_DEVICE_ADDED], 0, battnative, backend->priv->battery);
++	}
 +
 +	return TRUE;
 +}
@@ -626,6 +631,8 @@
 +
 +	backend->priv = UP_BACKEND_GET_PRIVATE (backend);
 +	backend->priv->daemon = NULL;
++	backend->priv->is_laptop = up_native_is_laptop();
++	g_debug("is_laptop:%d",backend->priv->is_laptop);
 +
 +	backend->priv->ac = UP_DEVICE(up_device_new());
 +	device_class = UP_DEVICE_GET_CLASS (backend->priv->ac);
@@ -634,33 +641,39 @@
 +	device_class->get_online = up_win_device_get_online;
 +	device_class->refresh = up_win_device_refresh;
 +
-+	backend->priv->battery = UP_DEVICE(up_device_new ());
-+	device_class = UP_DEVICE_GET_CLASS (backend->priv->battery);
-+	device_class->get_on_battery = up_win_device_get_on_battery;
-+	device_class->get_low_battery = up_win_device_get_low_battery;
-+	device_class->get_online = up_win_device_get_online;
-+	device_class->refresh = up_win_device_refresh;
-+
-+	/* creates thread */
-+	if((backend->priv->win_thread = (GThread*) g_thread_try_new("win-poller",(GThreadFunc)up_backend_win_event_thread, (void*) backend, &err) == NULL))
++	if (backend->priv->is_laptop)
 +	{
-+		g_warning("Thread create failed: %s", err->message);
-+		g_error_free (err);
++		backend->priv->battery = UP_DEVICE(up_device_new ());
++		device_class = UP_DEVICE_GET_CLASS (backend->priv->battery);
++		device_class->get_on_battery = up_win_device_get_on_battery;
++		device_class->get_low_battery = up_win_device_get_low_battery;
++		device_class->get_online = up_win_device_get_online;
++		device_class->refresh = up_win_device_refresh;
++
++		/* creates thread */
++		if((backend->priv->win_thread = (GThread*) g_thread_try_new("win-poller",(GThreadFunc)up_backend_win_event_thread, (void*) backend, &err) == NULL))
++		{
++			g_warning("Thread create failed: %s", err->message);
++			g_error_free (err);
++		}
++
++		/* setup dummy */
++		g_get_current_time (&timeval);
++		g_object_set (backend->priv->battery,
++			      "type", UP_DEVICE_KIND_BATTERY,
++			      "power-supply", TRUE,
++			      "is-present", TRUE,
++			      "is-rechargeable", TRUE,
++			      "has-history", TRUE,
++			      "state", UP_DEVICE_STATE_UNKNOWN,
++			      "percentage", 0.0f,
++			      "time-to-empty", (gint64) 0,
++			      "update-time", (guint64) timeval.tv_sec,
++			      (void*) NULL);
++
 +	}
 +
-+	/* setup dummy */
 +	g_get_current_time (&timeval);
-+	g_object_set (backend->priv->battery,
-+		      "type", UP_DEVICE_KIND_BATTERY,
-+		      "power-supply", TRUE,
-+		      "is-present", TRUE,
-+		      "is-rechargeable", TRUE,
-+		      "has-history", TRUE,
-+		      "state", UP_DEVICE_STATE_UNKNOWN,
-+		      "percentage", 0.0f,
-+		      "time-to-empty", (gint64) 0,
-+		      "update-time", (guint64) timeval.tv_sec,
-+		      (void*) NULL);
 +	g_object_set (backend->priv->ac,
 +		      "type", UP_DEVICE_KIND_LINE_POWER,
 +		      "online", TRUE,
@@ -668,6 +681,7 @@
 +		      "update-time", (guint64) timeval.tv_sec,
 +		      (void*) NULL);
 +}
++
 +/**
 + * up_backend_finalize:
 + **/
@@ -692,8 +706,8 @@
 +}
 +
 --- origsrc/upower-0.9.23/src/cygwin/up-native.c	1969-12-31 18:00:00.000000000 -0600
-+++ src/upower-0.9.23/src/cygwin/up-native.c	2014-07-23 18:40:13.085117700 -0500
-@@ -0,0 +1,68 @@
++++ src/upower-0.9.23/src/cygwin/up-native.c	2014-09-17 16:20:59.644386800 -0500
+@@ -0,0 +1,81 @@
 +/* -*- Mode: C; tab-width: 8; indent-tabs-mode: t; c-basic-offset: 8 -*-
 + *
 + * Copyright (C) 2009 Richard Hughes <richard@hughsie.com>
@@ -718,6 +732,7 @@
 +
 +#include "up-win-native.h"
 +#include "up-native.h"
++#include <windows.h>
 +
 +G_DEFINE_TYPE (UpWinNative, up_win_native, G_TYPE_OBJECT)
 +
@@ -762,9 +777,21 @@
 +{
 +	return up_win_native_get_path (UP_WIN_NATIVE (object));
 +}
++
++/**
++ * detect if we are on a desktop system or a laptop
++ * heuristic : laptop if SYSTEM_POWER_STATUS.BatteryFlag is not 128
++ */
++gboolean
++up_native_is_laptop(void)
++{
++	SYSTEM_POWER_STATUS sps;
++	GetSystemPowerStatus(&sps);
++	return (sps.BatteryFlag & 128) ? FALSE : TRUE;
++}
 --- origsrc/upower-0.9.23/src/cygwin/up-win-native.h	1969-12-31 18:00:00.000000000 -0600
-+++ src/upower-0.9.23/src/cygwin/up-win-native.h	2014-07-23 18:33:27.612629200 -0500
-@@ -0,0 +1,54 @@
++++ src/upower-0.9.23/src/cygwin/up-win-native.h	2014-09-17 16:44:06.490408100 -0500
+@@ -0,0 +1,55 @@
 +/* -*- Mode: C; tab-width: 8; indent-tabs-mode: t; c-basic-offset: 8 -*-
 + *
 + * Copyright (C) 2011 Landry Breuil <landry@openbsd.org>
@@ -816,6 +843,7 @@
 +GType up_win_native_get_type (void);
 +UpWinNative* up_win_native_new (const char*);
 +const gchar * up_win_native_get_path(UpWinNative*);
++gboolean up_native_is_laptop(void);
 +G_END_DECLS
 +
 +#endif
