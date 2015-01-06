@@ -1,8 +1,8 @@
 inherit gnome2
 
 NAME="upower"
-VERSION=0.9.23
-RELEASE=2
+VERSION=0.99.2
+RELEASE=1
 CATEGORY="System"
 SUMMARY="System power monitoring service"
 DESCRIPTION="UPower is an abstraction for enumerating power devices, listening
@@ -14,8 +14,7 @@ SRC_URI="http://upower.freedesktop.org/releases/upower-${VERSION}.tar.xz"
 SRC_URI+=" upowerd.sh"
 PATCH_URI="
 	0.9.23-glib-gettext.patch
-	0.9.23-drop-polkit.patch
-	0.9.23-backend-cygwin.patch
+	0.99.2-backend-cygwin.patch
 	0.9.23-dbus-user.patch
 "
 
@@ -32,13 +31,13 @@ src_install() {
 	keepdir /var/lib/upower
 }
 
-PKG_NAMES="upower libupower-glib1 libupower-glib-devel libupower-glib-doc girepository-UPowerGlib1.0"
+PKG_NAMES="upower libupower-glib3 libupower-glib-devel libupower-glib-doc girepository-UPowerGlib1.0"
 upower_CONTENTS="etc/UPower/ etc/dbus-1/ etc/rc.d/ usr/bin/upower.exe
 	usr/libexec/upowerd.exe usr/share/dbus-1/ usr/share/doc/
 	usr/share/locale/ usr/share/man/ var/lib/upower/"
-libupower_glib1_CATEGORY="Libs"
-libupower_glib1_REQUIRES=${NAME}
-libupower_glib1_CONTENTS="usr/bin/cygupower-glib-1.dll"
+libupower_glib3_CATEGORY="Libs"
+libupower_glib3_REQUIRES=${NAME}
+libupower_glib3_CONTENTS="usr/bin/cygupower-glib-3.dll"
 libupower_glib_devel_CATEGORY="Libs"
 libupower_glib_devel_CONTENTS="usr/include/libupower-glib/
 	usr/lib/libupower-glib.dll.a usr/lib/pkgconfig/upower-glib.pc"

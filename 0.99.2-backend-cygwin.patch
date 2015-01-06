@@ -1,6 +1,6 @@
---- origsrc/upower-0.9.23/configure.ac	2014-09-17 16:33:03.135489100 -0500
-+++ src/upower-0.9.23/configure.ac	2014-09-17 15:35:06.000000000 -0500
-@@ -187,6 +187,7 @@ if test x$with_backend = x; then
+--- origsrc/upower-0.99.2/configure.ac	2015-01-06 02:40:28.970447300 -0600
++++ src/upower-0.99.2/configure.ac	2015-01-06 02:41:46.433783900 -0600
+@@ -192,6 +192,7 @@ if test x$with_backend = x; then
  		[*-linux*],   [with_backend=linux],
  		[*-*freebsd*], [with_backend=freebsd],
  		[*-openbsd*], [with_backend=openbsd],
@@ -8,7 +8,7 @@
  		              [with_backend=dummy])
  fi
  AC_DEFINE_UNQUOTED(BACKEND, "$with_backend", [backend])
-@@ -213,6 +214,7 @@ AM_CONDITIONAL(BACKEND_TYPE_DUMMY, [test
+@@ -218,6 +219,7 @@ AM_CONDITIONAL(BACKEND_TYPE_DUMMY, [test
  AM_CONDITIONAL(BACKEND_TYPE_LINUX, [test x$with_backend = xlinux])
  AM_CONDITIONAL(BACKEND_TYPE_FREEBSD, [test x$with_backend = xfreebsd])
  AM_CONDITIONAL(BACKEND_TYPE_OPENBSD, [test x$with_backend = xopenbsd])
@@ -16,7 +16,7 @@
  
  dnl ---------------------------------------------------------------------------
  dnl - Build self tests
-@@ -241,6 +243,7 @@ src/dummy/Makefile
+@@ -246,6 +248,7 @@ src/dummy/Makefile
  src/freebsd/Makefile
  src/openbsd/Makefile
  src/linux/Makefile
@@ -24,8 +24,8 @@
  tools/Makefile
  doc/Makefile
  doc/version.xml
---- origsrc/upower-0.9.23/src/Makefile.am	2014-09-17 16:33:03.145489100 -0500
-+++ src/upower-0.9.23/src/Makefile.am	2014-09-17 15:35:06.000000000 -0500
+--- origsrc/upower-0.99.2/src/Makefile.am	2014-07-17 02:46:15.000000000 -0500
++++ src/upower-0.99.2/src/Makefile.am	2015-01-06 02:43:48.310760400 -0600
 @@ -1,6 +1,6 @@
  ## Process this file with automake to produce Makefile.in
  
@@ -34,7 +34,7 @@
  
  AM_CPPFLAGS = \
  	$(PIE_CFLAGS)						\
-@@ -93,13 +93,7 @@ upowerd_CPPFLAGS =						\
+@@ -84,12 +84,7 @@ upowerd_CPPFLAGS =						\
  	-I$(top_srcdir)/src					\
  	$(AM_CPPFLAGS)
  
@@ -43,19 +43,18 @@
 -	$(USB_LIBS)						\
 -	$(GIO_LIBS)						\
 -	$(DBUS_GLIB_LIBS)					\
--	$(POLKIT_LIBS)						\
 -	$(UPOWER_LIBS)
 +upowerd_LDADD =
  
  if BACKEND_TYPE_DUMMY
  upowerd_LDADD += 						\
-@@ -140,6 +134,20 @@ endif
+@@ -125,6 +120,19 @@ endif
  
  endif
  
 +if BACKEND_TYPE_CYGWIN
 +upowerd_LDADD += 						\
-+	cygwin/libupshared.la	\
++	cygwin/libupshared.la					\
 +	-lksguid
 +endif
 +
@@ -64,15 +63,14 @@
 +	$(USB_LIBS)						\
 +	$(GIO_LIBS)						\
 +	$(DBUS_GLIB_LIBS)					\
-+	$(POLKIT_LIBS)						\
 +	$(UPOWER_LIBS)
 +
  upowerd_CFLAGS =						\
  	$(WARNINGFLAGS_C)					\
  	$(NULL)
---- origsrc/upower-0.9.23/src/cygwin/Makefile.am	1969-12-31 18:00:00.000000000 -0600
-+++ src/upower-0.9.23/src/cygwin/Makefile.am	2014-09-17 15:35:06.000000000 -0500
-@@ -0,0 +1,25 @@
+--- origsrc/upower-0.99.2/src/cygwin/Makefile.am	1969-12-31 18:00:00.000000000 -0600
++++ src/upower-0.99.2/src/cygwin/Makefile.am	2015-01-06 02:45:05.537066900 -0600
+@@ -0,0 +1,28 @@
 +## Process this file with automake to produce Makefile.in
 +
 +AM_CPPFLAGS = \
@@ -81,30 +79,33 @@
 +	-DG_LOG_DOMAIN=\"UPower-Cygwin\"			\
 +	-I$(top_srcdir)/libupower-glib				\
 +	$(DBUS_GLIB_CFLAGS)					\
++	$(POLKIT_CFLAGS)					\
 +	$(GLIB_CFLAGS)
 +
-+noinst_LTLIBRARIES =
-+
 +if BACKEND_TYPE_CYGWIN
-+noinst_LTLIBRARIES += libupshared.la
++noinst_LTLIBRARIES = libupshared.la
 +endif
 +
 +libupshared_la_SOURCES =					\
 +	up-backend.c						\
 +	up-native.c						\
++	up-win-native.h						\
 +	$(BUILT_SOURCES)
++
++libupshared_la_CFLAGS =					\
++	$(WARNINGFLAGS_C)
 +
 +clean-local :
 +	rm -f *~
 +
 +-include $(top_srcdir)/git.mk
---- origsrc/upower-0.9.23/src/cygwin/up-backend.c	1969-12-31 18:00:00.000000000 -0600
-+++ src/upower-0.9.23/src/cygwin/up-backend.c	2014-09-17 16:50:41.400854500 -0500
-@@ -0,0 +1,604 @@
+--- origsrc/upower-0.99.2/src/cygwin/up-backend.c	1969-12-31 18:00:00.000000000 -0600
++++ src/upower-0.99.2/src/cygwin/up-backend.c	2015-01-06 12:34:16.921122500 -0600
+@@ -0,0 +1,573 @@
 +/* -*- Mode: C; tab-width: 8; indent-tabs-mode: t; c-basic-offset: 8 -*-
 + *
 + * Copyright (C) 2011 Landry Breuil <landry@openbsd.org>
-+ * Copyright (C) 2011 Yaakov Selkowitz <yselkowitz@cygwin.com>
++ * Copyright (C) 2014, 2015 Yaakov Selkowitz <yselkowi@redhat.com>
 + *
 + * Licensed under the GNU General Public License Version 2
 + *
@@ -129,22 +130,20 @@
 +#include "up-daemon.h"
 +#include "up-marshal.h"
 +#include "up-device.h"
-+#include <unistd.h>	/* for sleep() */
++#include <unistd.h> /* sleep() */
 +#include <windows.h>
 +
-+#define UP_BACKEND_SUSPEND_COMMAND	"/usr/bin/suspend"
-+#define UP_BACKEND_HIBERNATE_COMMAND	"/usr/bin/hibernate"
-+
 +static void	up_backend_class_init	(UpBackendClass	*klass);
-+static void	up_backend_init		(UpBackend	*backend);
-+static void	up_backend_finalize	(GObject	*object);
++static void	up_backend_init	(UpBackend		*backend);
++static void	up_backend_finalize	(GObject		*object);
 +
-+static UpDeviceState up_backend_win_get_battery_state_value(u_char battery_state);
++static gboolean	up_backend_win_get_power_info(SYSTEM_POWER_STATUS*);
++static UpDeviceState up_backend_win_get_battery_state_value(u_char BatteryFlag);
++LRESULT CALLBACK up_backend_win_powerchange_event_cb(HWND, UINT, WPARAM, LPARAM);
 +
-+static gboolean	up_win_device_get_on_battery	(UpDevice *device, gboolean *on_battery);
-+static gboolean	up_win_device_get_low_battery	(UpDevice *device, gboolean *low_battery);
-+static gboolean	up_win_device_get_online	(UpDevice *device, gboolean *online);
-+static gboolean	up_win_device_refresh		(UpDevice *device);
++static gboolean		up_win_device_get_on_battery	(UpDevice *device, gboolean *on_battery);
++static gboolean		up_win_device_get_online	(UpDevice *device, gboolean *online);
++static gboolean		up_win_device_refresh		(UpDevice *device);
 +
 +#define UP_BACKEND_GET_PRIVATE(o) (G_TYPE_INSTANCE_GET_PRIVATE ((o), UP_TYPE_BACKEND, UpBackendPrivate))
 +
@@ -155,6 +154,7 @@
 +	UpDevice		*battery;
 +	GThread			*win_thread;
 +	gboolean		is_laptop;
++	HPOWERNOTIFY	hPowerNotify[2];
 +};
 +
 +enum {
@@ -172,6 +172,7 @@
 + **/
 +
 +
++/* those three ripped from freebsd/up-device-supply.c */
 +gboolean
 +up_win_device_get_on_battery (UpDevice *device, gboolean * on_battery)
 +{
@@ -195,28 +196,6 @@
 +		return FALSE;
 +
 +	*on_battery = (state == UP_DEVICE_STATE_DISCHARGING);
-+	return TRUE;
-+}
-+gboolean
-+up_win_device_get_low_battery (UpDevice *device, gboolean * low_battery)
-+{
-+	gboolean ret;
-+	gboolean on_battery;
-+	gdouble percentage;
-+
-+	g_return_val_if_fail (low_battery != NULL, FALSE);
-+
-+	ret = up_win_device_get_on_battery (device, &on_battery);
-+	if (!ret)
-+		return FALSE;
-+
-+	if (!on_battery) {
-+		*low_battery = FALSE;
-+		return TRUE;
-+	}
-+
-+	g_object_get (device, "percentage", &percentage, (void*) NULL);
-+	*low_battery = (percentage < 10.0f);
 +	return TRUE;
 +}
 +
@@ -256,17 +235,17 @@
 +	UpWinNative *acnative = NULL;
 +	UpWinNative *battnative = NULL;
 +	backend->priv->daemon = g_object_ref (daemon);
-+	/* XXX no way to get lid status atm */
++	/* FIXME: no way to get lid status atm */
 +	up_daemon_set_lid_is_present (backend->priv->daemon, FALSE);
-+
-+	acnative = up_win_native_new("/ac");
-+	if (!up_device_coldplug (backend->priv->ac, backend->priv->daemon, G_OBJECT(acnative)))
-+		g_warning ("failed to coldplug ac");
-+	else
-+		g_signal_emit (backend, signals[SIGNAL_DEVICE_ADDED], 0, acnative, backend->priv->ac);
 +
 +	if (backend->priv->is_laptop)
 +	{
++		acnative = up_win_native_new("/ac");
++		if (!up_device_coldplug (backend->priv->ac, backend->priv->daemon, G_OBJECT(acnative)))
++			g_warning ("failed to coldplug ac");
++		else
++			g_signal_emit (backend, signals[SIGNAL_DEVICE_ADDED], 0, acnative, backend->priv->ac);
++
 +		battnative = up_win_native_new("/batt");
 +		if (!up_device_coldplug (backend->priv->battery, backend->priv->daemon, G_OBJECT(battnative)))
 +			g_warning ("failed to coldplug battery");
@@ -277,86 +256,79 @@
 +	return TRUE;
 +}
 +
-+
 +/**
-+ * up_backend_get_powersave_command:
-+ **/
-+const gchar *
-+up_backend_get_powersave_command (UpBackend *backend, gboolean powersave)
++ * up_backend_unplug:
++ * @backend: The %UpBackend class instance
++ *
++ * Forget about all learned devices, effectively undoing up_backend_coldplug.
++ * Resources are released without emitting signals.
++ */
++void
++up_backend_unplug (UpBackend *backend)
 +{
-+	return "/bin/true";
-+}
-+
-+/**
-+ * up_backend_get_suspend_command:
-+ **/
-+const gchar *
-+up_backend_get_suspend_command (UpBackend *backend)
-+{
-+	return UP_BACKEND_SUSPEND_COMMAND;
++	if (backend->priv->daemon != NULL) {
++		g_object_unref (backend->priv->daemon);
++		backend->priv->daemon = NULL;
++	}
 +}
 +
 +/**
-+ * up_backend_get_hibernate_command:
++ * up_backend_get_critical_action:
++ * @backend: The %UpBackend class instance
++ *
++ * Which action will be taken when %UP_DEVICE_LEVEL_ACTION
++ * warning-level occurs.
 + **/
-+const gchar *
-+up_backend_get_hibernate_command (UpBackend *backend)
++const char *
++up_backend_get_critical_action (UpBackend *backend)
 +{
-+	return UP_BACKEND_HIBERNATE_COMMAND;
-+}
-+
-+gboolean
-+up_backend_emits_resuming (UpBackend *backend)
-+{
-+	return FALSE;
++	return "PowerOff";
 +}
 +
 +/**
-+ * up_backend_kernel_can_suspend:
++ * up_backend_take_action:
++ * @backend: The %UpBackend class instance
++ *
++ * Act upon the %UP_DEVICE_LEVEL_ACTION warning-level.
 + **/
-+gboolean
-+up_backend_kernel_can_suspend (UpBackend *backend)
++void
++up_backend_take_action (UpBackend *backend)
 +{
-+	return TRUE;
-+}
-+
-+/**
-+ * up_backend_kernel_can_hibernate:
-+ **/
-+gboolean
-+up_backend_kernel_can_hibernate (UpBackend *backend)
-+{
-+	return TRUE;
-+}
-+
-+gboolean
-+up_backend_has_encrypted_swap (UpBackend *backend)
-+{
-+	return FALSE;
-+}
-+
-+/* Return value: a percentage value */
-+gfloat
-+up_backend_get_used_swap (UpBackend *backend)
-+{
-+	return 0.0;
++	/* FIXME: Implement */
 +}
 +
 +/**
 + * Cygwin specific code
 + **/
 +
-+static UpDeviceState
-+up_backend_win_get_battery_flag_value(BYTE battery_flag) {
-+	if (battery_flag & 255)
++static gboolean
++up_backend_win_get_power_info(SYSTEM_POWER_STATUS *bstate) {
++	bstate->ACLineStatus = 255;
++	bstate->BatteryFlag = 255;
++	bstate->BatteryLifePercent = 255;
++	bstate->BatteryLifeTime = -1;
++
++	if (-1 == GetSystemPowerStatus(bstate)) {
++		DWORD dwMessageId = GetLastError();
++		char lpBuffer[256];
++		FormatMessageA (FORMAT_MESSAGE_FROM_SYSTEM, NULL, dwMessageId,
++			0, lpBuffer, sizeof (lpBuffer), NULL);
++		g_error("GetSystemPowerStatus failed : %s", lpBuffer);
++		return FALSE;
++	}
++	return TRUE;
++}
++
++UpDeviceState up_backend_win_get_battery_state_value(u_char BatteryFlag) {
++	if (BatteryFlag & 255)
 +		return UP_DEVICE_STATE_UNKNOWN;
-+	else if (battery_flag & 128)
++	else if (BatteryFlag & 128)
 +		return UP_DEVICE_STATE_EMPTY;
-+	else if (battery_flag & 8)
++	else if (BatteryFlag & 8)
 +		return UP_DEVICE_STATE_CHARGING;
-+	else if (battery_flag & 4)
++	else if (BatteryFlag & 4)
 +		return UP_DEVICE_STATE_EMPTY;
-+	return UP_DEVICE_STATE_DISCHARGING;
++	return UP_DEVICE_STATE_DISCHARGING; // XXXX
 +}
 +
 +static gboolean
@@ -365,11 +337,12 @@
 +	gboolean ret, new_is_online, cur_is_online;
 +	SYSTEM_POWER_STATUS sps;
 +
-+	ret = GetSystemPowerStatus(&sps);
++	ret = up_backend_win_get_power_info(&sps);
 +	if (!ret)
-+		return FALSE;
++		return ret;
 +
 +	g_object_get (device, "online", &cur_is_online, (void*) NULL);
++	/* XXX use acpiac0.indicator0 if available */
 +	new_is_online = (sps.ACLineStatus == 1 ? TRUE : FALSE);
 +	if (cur_is_online != new_is_online)
 +	{
@@ -384,41 +357,38 @@
 +static gboolean
 +up_backend_update_battery_state(UpDevice* device)
 +{
-+	gdouble cur_percentage, new_percentage;
++	gdouble percentage;
 +	gboolean ret, is_present;
 +	UpDeviceState cur_state, new_state;
 +	gint64 cur_time_to_empty, new_time_to_empty;
 +	SYSTEM_POWER_STATUS sps;
 +
-+	ret = GetSystemPowerStatus(&sps);
++	ret = up_backend_win_get_power_info(&sps);
 +	if (!ret)
-+		return FALSE;
++		return ret;
 +
 +	g_object_get (device,
 +		"state", &cur_state,
-+		"percentage", &cur_percentage,
++		"percentage", &percentage,
 +		"time-to-empty", &cur_time_to_empty,
 +		"is-present", &is_present,
 +		(void*) NULL);
 +
 +	/*
 +	 * XXX: Stop having a split brain regarding
-+	 * up_backend_win_get_battery_flag_value(). Either move the state
++	 * up_backend_win_get_battery_state_value(). Either move the state
 +	 * setting code below into that function, or inline that function here.
 +	 */
-+	new_state = up_backend_win_get_battery_flag_value(sps.BatteryFlag);
-+	new_percentage = (gdouble) sps.BatteryLifePercent;
-+	if (new_percentage > 254)
-+		new_percentage = 0.0f;
++	new_state = up_backend_win_get_battery_state_value(sps.BatteryFlag);
 +	// if percentage/minutes goes down or ac is off, we're likely discharging..
-+	if (new_percentage < cur_percentage || cur_time_to_empty < new_time_to_empty || sps.ACLineStatus == 0)
++	if (percentage < sps.BatteryLifePercent || cur_time_to_empty < new_time_to_empty || sps.ACLineStatus == 0)
 +		new_state = UP_DEVICE_STATE_DISCHARGING;
 +	/*
 +	 * If we're on AC, we may either be charging, or the battery is already
 +	 * fully charged. Figure out which.
 +	 */
 +	if (sps.ACLineStatus == 1)
-+		if (new_percentage >= 99.0)
++		if ((gdouble) sps.BatteryLifePercent >= 99.0)
 +			new_state = UP_DEVICE_STATE_FULLY_CHARGED;
 +		else
 +			new_state = UP_DEVICE_STATE_CHARGING;
@@ -443,17 +413,17 @@
 +		is_present = TRUE;
 +	}
 +
-+	// zero out new_time_to empty if we're not discharging or minutes_left is negative
-+	new_time_to_empty = (new_state == UP_DEVICE_STATE_DISCHARGING && sps.BatteryLifeTime > 0 ? sps.BatteryLifeTime : 0);
++	// zero out new_time_to empty if we're not discharging or minutes left is negative
++	new_time_to_empty = (new_state == UP_DEVICE_STATE_DISCHARGING && sps.BatteryLifeTime > 0 ? sps.BatteryLifeTime / 60 : 0);
 +
 +	if (cur_state != new_state ||
-+		cur_percentage != new_percentage ||
++		percentage != (gdouble) sps.BatteryLifePercent ||
 +		cur_time_to_empty != new_time_to_empty)
 +	{
 +		g_object_set (device,
 +			"state", new_state,
-+			"percentage", new_percentage,
-+			"time-to-empty", new_time_to_empty,
++			"percentage", (gdouble) sps.BatteryLifePercent,
++			"time-to-empty", new_time_to_empty * 60,
 +			"is-present", is_present,
 +			(void*) NULL);
 +		return TRUE;
@@ -501,7 +471,6 @@
 +up_win_device_refresh(UpDevice* device)
 +{
 +	UpDeviceKind type;
-+	GTimeVal timeval;
 +	gboolean ret;
 +	g_object_get (device, "type", &type, NULL);
 +
@@ -517,10 +486,8 @@
 +			break;
 +	}
 +
-+	if (ret) {
-+		g_get_current_time (&timeval);
-+		g_object_set (device, "update-time", (guint64) timeval.tv_sec, NULL);
-+	}
++	if (ret)
++		g_object_set (device, "update-time", (guint64) g_get_real_time () / G_USEC_PER_SEC, NULL);
 +
 +	return ret;
 +}
@@ -528,7 +495,7 @@
 +/* setup windows notification */
 +/* http://www.zachburlingame.com/2011/04/capturing-windows-power-events-in-a-console-application/ */
 +/* http://hg.zachburlingame.com/windowspowerevents */
-+static gboolean
++static gpointer
 +up_backend_win_event_thread(gpointer object)
 +{
 +	UpBackend *backend;
@@ -537,11 +504,10 @@
 +	WNDCLASSEX wcx = { sizeof (WNDCLASSEX), 0, (WNDPROC) up_backend_win_powerchange_event_cb,
 +			   0, 0, NULL, NULL, NULL, NULL, NULL, "HiddenWndClass", NULL };
 +	HWND hwnd;
-+	HPOWERNOTIFY hpn[2];
 +	MSG msg;
 +	BOOL ret;
 +
-+	g_return_val_if_fail (UP_IS_BACKEND (object), FALSE);
++	g_return_val_if_fail (UP_IS_BACKEND (object), NULL);
 +	backend = UP_BACKEND (object);
 +
 +	g_debug("setting up win thread");
@@ -550,32 +516,33 @@
 +	user32 = LoadLibrary ("user32.dll");
 +	pRPSN = (typeof (pRPSN)) GetProcAddress (user32, "RegisterPowerSettingNotification");
 +	if (!pRPSN) {
++		g_error ("RegisterPowerSettingNotification missing");
 +		FreeLibrary (user32);
-+		return FALSE;
++		return NULL;
 +	}
 +
 +	RegisterClassEx (&wcx);
 +	hwnd = CreateWindow("HiddenWndClass", NULL, WS_OVERLAPPEDWINDOW, -1, -1,
 +			    0, 0, NULL, NULL, NULL, object);
 +
-+	if (!hwnd)
-+		return FALSE;
++	if (!hwnd) {
++		g_error("CreateWindow");
++		return NULL;
++	}
 +
-+	hpn[0] = pRPSN (hwnd, &GUID_ACDC_POWER_SOURCE, DEVICE_NOTIFY_WINDOW_HANDLE);
-+	hpn[1] = pRPSN (hwnd, &GUID_BATTERY_PERCENTAGE_REMAINING, DEVICE_NOTIFY_WINDOW_HANDLE);
++	backend->priv->hPowerNotify[0] = pRPSN (hwnd, &GUID_ACDC_POWER_SOURCE, DEVICE_NOTIFY_WINDOW_HANDLE);
++	backend->priv->hPowerNotify[1] = pRPSN (hwnd, &GUID_BATTERY_PERCENTAGE_REMAINING, DEVICE_NOTIFY_WINDOW_HANDLE);
 +
 +	FreeLibrary (user32);
 +
 +	while ((ret = GetMessage (&msg, hwnd, 0, 0)) != 0) {
-+		if (ret = -1)
-+			return FALSE;
-+		else {
++		if (ret != -1) {
 +			TranslateMessage(&msg);
 +			DispatchMessage(&msg);
 +		}
 +	}
 +
-+	return TRUE;
++	return NULL;
 +}
 +
 +/**
@@ -626,30 +593,24 @@
 +up_backend_init (UpBackend *backend)
 +{
 +	GError *err = NULL;
-+	GTimeVal timeval;
 +	UpDeviceClass *device_class;
++	gint64 current_time;
 +
 +	backend->priv = UP_BACKEND_GET_PRIVATE (backend);
-+	backend->priv->daemon = NULL;
 +	backend->priv->is_laptop = up_native_is_laptop();
 +	g_debug("is_laptop:%d",backend->priv->is_laptop);
-+
-+	backend->priv->ac = UP_DEVICE(up_device_new());
-+	device_class = UP_DEVICE_GET_CLASS (backend->priv->ac);
-+	device_class->get_on_battery = up_win_device_get_on_battery;
-+	device_class->get_low_battery = up_win_device_get_low_battery;
-+	device_class->get_online = up_win_device_get_online;
-+	device_class->refresh = up_win_device_refresh;
-+
 +	if (backend->priv->is_laptop)
 +	{
++		backend->priv->ac = UP_DEVICE(up_device_new());
 +		backend->priv->battery = UP_DEVICE(up_device_new ());
 +		device_class = UP_DEVICE_GET_CLASS (backend->priv->battery);
 +		device_class->get_on_battery = up_win_device_get_on_battery;
-+		device_class->get_low_battery = up_win_device_get_low_battery;
 +		device_class->get_online = up_win_device_get_online;
 +		device_class->refresh = up_win_device_refresh;
-+
++		device_class = UP_DEVICE_GET_CLASS (backend->priv->ac);
++		device_class->get_on_battery = up_win_device_get_on_battery;
++		device_class->get_online = up_win_device_get_online;
++		device_class->refresh = up_win_device_refresh;
 +		/* creates thread */
 +		if((backend->priv->win_thread = (GThread*) g_thread_try_new("win-poller",(GThreadFunc)up_backend_win_event_thread, (void*) backend, &err) == NULL))
 +		{
@@ -658,7 +619,7 @@
 +		}
 +
 +		/* setup dummy */
-+		g_get_current_time (&timeval);
++		current_time = g_get_real_time () / G_USEC_PER_SEC;
 +		g_object_set (backend->priv->battery,
 +			      "type", UP_DEVICE_KIND_BATTERY,
 +			      "power-supply", TRUE,
@@ -668,20 +629,16 @@
 +			      "state", UP_DEVICE_STATE_UNKNOWN,
 +			      "percentage", 0.0f,
 +			      "time-to-empty", (gint64) 0,
-+			      "update-time", (guint64) timeval.tv_sec,
++			      "update-time", (guint64) current_time,
 +			      (void*) NULL);
-+
++		g_object_set (backend->priv->ac,
++			      "type", UP_DEVICE_KIND_LINE_POWER,
++			      "online", TRUE,
++			      "power-supply", TRUE,
++			      "update-time", (guint64) current_time,
++			      (void*) NULL);
 +	}
-+
-+	g_get_current_time (&timeval);
-+	g_object_set (backend->priv->ac,
-+		      "type", UP_DEVICE_KIND_LINE_POWER,
-+		      "online", TRUE,
-+		      "power-supply", TRUE,
-+		      "update-time", (guint64) timeval.tv_sec,
-+		      (void*) NULL);
 +}
-+
 +/**
 + * up_backend_finalize:
 + **/
@@ -689,6 +646,8 @@
 +up_backend_finalize (GObject *object)
 +{
 +	UpBackend *backend;
++	HMODULE user32;
++	BOOL (WINAPI *pUPSN)(HPOWERNOTIFY);
 +
 +	g_return_if_fail (UP_IS_BACKEND (object));
 +
@@ -700,17 +659,30 @@
 +		g_object_unref (backend->priv->battery);
 +	if (backend->priv->ac != NULL)
 +		g_object_unref (backend->priv->ac);
++
++	user32 = LoadLibrary ("user32.dll");
++	pUPSN = (typeof (pUPSN)) GetProcAddress (user32, "UnregisterPowerSettingNotification");
++	if (pUPSN) {
++		if (backend->priv->hPowerNotify[0] != NULL)
++			pUPSN (backend->priv->hPowerNotify[0]);
++		if (backend->priv->hPowerNotify[1] != NULL)
++			pUPSN (backend->priv->hPowerNotify[1]);
++	}
++	FreeLibrary (user32);
++
 +	/* XXX stop win_thread ? */
 +
 +	G_OBJECT_CLASS (up_backend_parent_class)->finalize (object);
 +}
 +
---- origsrc/upower-0.9.23/src/cygwin/up-native.c	1969-12-31 18:00:00.000000000 -0600
-+++ src/upower-0.9.23/src/cygwin/up-native.c	2014-09-17 16:20:59.644386800 -0500
-@@ -0,0 +1,81 @@
+--- origsrc/upower-0.99.2/src/cygwin/up-native.c	1969-12-31 18:00:00.000000000 -0600
++++ src/upower-0.99.2/src/cygwin/up-native.c	2015-01-06 02:50:31.310434800 -0600
+@@ -0,0 +1,78 @@
 +/* -*- Mode: C; tab-width: 8; indent-tabs-mode: t; c-basic-offset: 8 -*-
 + *
-+ * Copyright (C) 2009 Richard Hughes <richard@hughsie.com>
++ * Copyright (C) 2011 Landry Breuil <landry@openbsd.org>
++ *
++ * Licensed under the GNU General Public License Version 2
 + *
 + * This program is free software; you can redistribute it and/or modify
 + * it under the terms of the GNU General Public License as published by
@@ -724,11 +696,8 @@
 + *
 + * You should have received a copy of the GNU General Public License
 + * along with this program; if not, write to the Free Software
-+ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
-+ *
++ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 + */
-+
-+#include <glib.h>
 +
 +#include "up-win-native.h"
 +#include "up-native.h"
@@ -767,8 +736,6 @@
 + * @object: the native tracking object
 + *
 + * This converts a GObject used as the device data into a native path.
-+ * This would be implemented on a Linux system using:
-+ *  g_udev_device_get_sysfs_path (G_UDEV_DEVICE (object))
 + *
 + * Return value: The native path for the device which is unique, e.g. "/sys/class/power/BAT1"
 + **/
@@ -780,17 +747,17 @@
 +
 +/**
 + * detect if we are on a desktop system or a laptop
-+ * heuristic : laptop if SYSTEM_POWER_STATUS.BatteryFlag is not 128
++ * heuristic : laptop if SYSTEM_POWER_STATUS.BatteryFlag != 128
 + */
 +gboolean
-+up_native_is_laptop(void)
++up_native_is_laptop()
 +{
 +	SYSTEM_POWER_STATUS sps;
 +	GetSystemPowerStatus(&sps);
 +	return (sps.BatteryFlag & 128) ? FALSE : TRUE;
 +}
---- origsrc/upower-0.9.23/src/cygwin/up-win-native.h	1969-12-31 18:00:00.000000000 -0600
-+++ src/upower-0.9.23/src/cygwin/up-win-native.h	2014-09-17 16:44:06.490408100 -0500
+--- origsrc/upower-0.99.2/src/cygwin/up-win-native.h	1969-12-31 18:00:00.000000000 -0600
++++ src/upower-0.99.2/src/cygwin/up-win-native.h	2015-01-06 02:47:14.270413900 -0600
 @@ -0,0 +1,55 @@
 +/* -*- Mode: C; tab-width: 8; indent-tabs-mode: t; c-basic-offset: 8 -*-
 + *
